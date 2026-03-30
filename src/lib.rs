@@ -5,6 +5,9 @@
 //! - sending synchronous and asynchronous transactions;
 //! - subscribing to order and trade callback streams;
 //! - decoding callback payloads into domain events.
+//!
+#[cfg(not(windows))]
+compile_error!("trans2quik supports only Windows targets (uses Trans2QUIK.dll).");
 
 mod callbacks;
 mod codec;

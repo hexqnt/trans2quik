@@ -11,7 +11,7 @@ readme = "README.md"
 repository = "https://github.com/stepanov-denis/trans2quik"
 license = "MIT OR Apache-2.0"
 keywords = ["moex", "quik", "trans2quik", "trading"]
-categories = ["finance"]
+categories = ["finance", "os::windows-apis"]
 
 [dependencies]
 libloading = "0.9.0"
@@ -20,3 +20,7 @@ tracing = "0.1.44"
 encoding_rs = "0.8.35"
 tokio = { version = "1.50.0", features = ["sync"] }
 chrono = { version = "0.4.44", features = ["serde"] }
+
+[package.metadata.docs.rs]
+default-target = "x86_64-pc-windows-msvc"
+targets = ["x86_64-pc-windows-msvc"]
