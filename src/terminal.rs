@@ -205,7 +205,7 @@ impl Terminal {
     /// Establishes connection between the DLL and QUIK terminal.
     pub fn connect(&self) -> Result<Trans2QuikResult, Trans2QuikError> {
         let path_ptr = self.path_to_quik.as_ptr().cast_mut();
-        Ok(self.call_with_error_buffer(
+        Ok(Self::call_with_error_buffer(
             "TRANS2QUIK_CONNECT",
             |error_code, error_message, error_message_len| {
                 // SAFETY: сигнатура и указатели соответствуют контракту DLL.
@@ -218,7 +218,7 @@ impl Terminal {
 
     /// Disconnects the DLL from QUIK terminal.
     pub fn disconnect(&self) -> Result<Trans2QuikResult, Trans2QuikError> {
-        Ok(self.call_with_error_buffer(
+        Ok(Self::call_with_error_buffer(
             "TRANS2QUIK_DISCONNECT",
             |error_code, error_message, error_message_len| {
                 // SAFETY: сигнатура и указатели соответствуют контракту DLL.
@@ -229,7 +229,7 @@ impl Terminal {
 
     /// Checks whether QUIK terminal is connected to QUIK server.
     pub fn is_quik_connected(&self) -> Result<Trans2QuikResult, Trans2QuikError> {
-        Ok(self.call_with_error_buffer(
+        Ok(Self::call_with_error_buffer(
             "TRANS2QUIK_IS_QUIK_CONNECTED",
             |error_code, error_message, error_message_len| {
                 // SAFETY: сигнатура и указатели соответствуют контракту DLL.
@@ -242,7 +242,7 @@ impl Terminal {
 
     /// Checks whether the DLL is connected to QUIK terminal.
     pub fn is_dll_connected(&self) -> Result<Trans2QuikResult, Trans2QuikError> {
-        Ok(self.call_with_error_buffer(
+        Ok(Self::call_with_error_buffer(
             "TRANS2QUIK_IS_DLL_CONNECTED",
             |error_code, error_message, error_message_len| {
                 // SAFETY: сигнатура и указатели соответствуют контракту DLL.
@@ -314,7 +314,7 @@ impl Terminal {
         let trans_str = CString::new(transaction_str)?;
         let trans_str_ptr = trans_str.as_ptr().cast_mut();
 
-        Ok(self.call_with_error_buffer(
+        Ok(Self::call_with_error_buffer(
             "TRANS2QUIK_SEND_ASYNC_TRANSACTION",
             |error_code, error_message, error_message_len| {
                 // SAFETY: сигнатура и указатели соответствуют контракту DLL.
@@ -332,7 +332,7 @@ impl Terminal {
 
     /// Installs the connection status callback in Trans2QUIK.
     pub fn set_connection_status_callback(&self) -> Result<Trans2QuikResult, Trans2QuikError> {
-        Ok(self.call_with_error_buffer(
+        Ok(Self::call_with_error_buffer(
             "TRANS2QUIK_SET_CONNECTION_STATUS_CALLBACK",
             |error_code, error_message, error_message_len| {
                 // SAFETY: сигнатура и указатели соответствуют контракту DLL.
@@ -353,7 +353,7 @@ impl Terminal {
     /// According to Trans2QUIK API contract, asynchronous callback-based flow
     /// should not be mixed with synchronous processing of the same transaction stream.
     pub fn set_transactions_reply_callback(&self) -> Result<Trans2QuikResult, Trans2QuikError> {
-        Ok(self.call_with_error_buffer(
+        Ok(Self::call_with_error_buffer(
             "TRANS2QUIK_SET_TRANSACTIONS_REPLY_CALLBACK",
             |error_code, error_message, error_message_len| {
                 // SAFETY: сигнатура и указатели соответствуют контракту DLL.
@@ -375,7 +375,7 @@ impl Terminal {
         class_code: &str,
         sec_code: &str,
     ) -> Result<Trans2QuikResult, Trans2QuikError> {
-        self.subscribe_impl(
+        Self::subscribe_impl(
             "TRANS2QUIK_SUBSCRIBE_ORDERS",
             self.api.subscribe_orders,
             class_code,
@@ -389,7 +389,7 @@ impl Terminal {
         class_code: &str,
         sec_code: &str,
     ) -> Result<Trans2QuikResult, Trans2QuikError> {
-        self.subscribe_impl(
+        Self::subscribe_impl(
             "TRANS2QUIK_SUBSCRIBE_TRADES",
             self.api.subscribe_trades,
             class_code,
@@ -415,15 +415,21 @@ impl Terminal {
 
     /// Stops order callback stream and clears server-side subscription list.
     pub fn unsubscribe_orders(&self) -> Result<Trans2QuikResult, Trans2QuikError> {
-        Ok(self.call_without_args("TRANS2QUIK_UNSUBSCRIBE_ORDERS", self.api.unsubscribe_orders))
+        Ok(Self::call_without_args(
+            "TRANS2QUIK_UNSUBSCRIBE_ORDERS",
+            self.api.unsubscribe_orders,
+        ))
     }
 
     /// Stops trade callback stream and clears server-side subscription list.
     pub fn unsubscribe_trades(&self) -> Result<Trans2QuikResult, Trans2QuikError> {
-        Ok(self.call_without_args("TRANS2QUIK_UNSUBSCRIBE_TRADES", self.api.unsubscribe_trades))
+        Ok(Self::call_without_args(
+            "TRANS2QUIK_UNSUBSCRIBE_TRADES",
+            self.api.unsubscribe_trades,
+        ))
     }
 
-    fn call_with_error_buffer<F>(&self, function_name: &str, func: F) -> Trans2QuikResult
+    fn call_with_error_buffer<F>(function_name: &str, func: F) -> Trans2QuikResult
     where
         F: FnOnce(*mut c_long, *mut c_char, c_long) -> c_long,
     {
@@ -447,7 +453,7 @@ impl Terminal {
         trans2quik_result
     }
 
-    fn call_without_args(&self, function_name: &str, func: UnsubscribeFn) -> Trans2QuikResult {
+    fn call_without_args(function_name: &str, func: UnsubscribeFn) -> Trans2QuikResult {
         // SAFETY: сигнатура функции проверена при загрузке символа.
         let function_result = unsafe { func() };
         let trans2quik_result = Trans2QuikResult::from(function_result);
@@ -458,7 +464,6 @@ impl Terminal {
     }
 
     fn subscribe_impl(
-        &self,
         function_name: &str,
         func: SubscribeFn,
         class_code: &str,

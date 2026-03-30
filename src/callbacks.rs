@@ -129,8 +129,8 @@ pub(crate) fn set_trade_status_sender(
     Ok(())
 }
 
-fn decode_field(ptr: *mut c_char, field_name: &str) -> Option<String> {
-    match decode_lpstr(ptr.cast_const()) {
+fn decode_field(ptr: *const c_char, field_name: &str) -> Option<String> {
+    match decode_lpstr(ptr) {
         Ok(value) => Some(value),
         Err(err) => {
             error!("Failed to decode {field_name}: {err}");
