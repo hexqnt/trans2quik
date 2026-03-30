@@ -4,30 +4,33 @@ use crate::types::{
     IsSell, Mode, OrderEvent, OrderInfo, Status, TradeEvent, TradeInfo, Trans2QuikResult, TransId,
     TransactionInfo,
 };
-use libc::{c_char, c_double, c_long, c_ulonglong, intptr_t};
+use libc::{c_char, c_double, c_long, intptr_t};
 use std::sync::{Mutex, OnceLock};
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::{error, info};
 
-pub(crate) type ConnectionStatusCallback =
-    unsafe extern "C" fn(connection_event: c_long, error_code: c_long, error_message: *mut c_char);
+pub(crate) type ConnectionStatusCallback = unsafe extern "system" fn(
+    connection_event: c_long,
+    error_code: c_long,
+    error_message: *const c_char,
+);
 
-pub(crate) type TransactionReplyCallback = unsafe extern "C" fn(
+pub(crate) type TransactionReplyCallback = unsafe extern "system" fn(
     result_code: c_long,
     error_code: c_long,
     reply_code: c_long,
-    trans_id: c_long,
-    order_num: c_ulonglong,
-    reply_message: *mut c_char,
+    trans_id: u32,
+    order_num: u64,
+    reply_message: *const c_char,
     trans_reply_descriptor: intptr_t,
 );
 
-pub(crate) type OrderStatusCallback = unsafe extern "C" fn(
+pub(crate) type OrderStatusCallback = unsafe extern "system" fn(
     mode: c_long,
-    trans_id: c_long,
-    order_num: c_ulonglong,
-    class_code: *mut c_char,
-    sec_code: *mut c_char,
+    trans_id: u32,
+    order_num: u64,
+    class_code: *const c_char,
+    sec_code: *const c_char,
     price: c_double,
     balance: i64,
     value: c_double,
@@ -36,12 +39,12 @@ pub(crate) type OrderStatusCallback = unsafe extern "C" fn(
     order_descriptor: intptr_t,
 );
 
-pub(crate) type TradeStatusCallback = unsafe extern "C" fn(
+pub(crate) type TradeStatusCallback = unsafe extern "system" fn(
     mode: c_long,
-    trade_num: c_ulonglong,
-    order_num: c_ulonglong,
-    class_code: *mut c_char,
-    sec_code: *mut c_char,
+    trade_num: u64,
+    order_num: u64,
+    class_code: *const c_char,
+    sec_code: *const c_char,
     price: c_double,
     quantity: i64,
     is_sell: c_long,
@@ -50,12 +53,13 @@ pub(crate) type TradeStatusCallback = unsafe extern "C" fn(
 );
 
 type TransactionReplySecCodeFn =
-    unsafe extern "C" fn(trans_reply_descriptor: intptr_t) -> *mut c_char;
-type TransactionReplyPriceFn = unsafe extern "C" fn(trans_reply_descriptor: intptr_t) -> c_double;
-type OrderDateFn = unsafe extern "C" fn(order_descriptor: intptr_t) -> c_long;
-type OrderTimeFn = unsafe extern "C" fn(order_descriptor: intptr_t) -> c_long;
-type TradeDateFn = unsafe extern "C" fn(trade_descriptor: intptr_t) -> c_long;
-type TradeTimeFn = unsafe extern "C" fn(trade_descriptor: intptr_t) -> c_long;
+    unsafe extern "system" fn(trans_reply_descriptor: intptr_t) -> *mut c_char;
+type TransactionReplyPriceFn =
+    unsafe extern "system" fn(trans_reply_descriptor: intptr_t) -> c_double;
+type OrderDateFn = unsafe extern "system" fn(order_descriptor: intptr_t) -> c_long;
+type OrderTimeFn = unsafe extern "system" fn(order_descriptor: intptr_t) -> c_long;
+type TradeDateFn = unsafe extern "system" fn(trade_descriptor: intptr_t) -> c_long;
+type TradeTimeFn = unsafe extern "system" fn(trade_descriptor: intptr_t) -> c_long;
 
 #[derive(Clone, Copy)]
 pub(crate) struct CallbackApi {
@@ -139,25 +143,30 @@ fn decode_field(ptr: *const c_char, field_name: &str) -> Option<String> {
     }
 }
 
+#[cfg(windows)]
+fn c_long_to_i32(value: c_long, _field_name: &str) -> Option<i32> {
+    Some(value)
+}
+
+#[cfg(not(windows))]
 fn c_long_to_i32(value: c_long, field_name: &str) -> Option<i32> {
-    match i32::try_from(value) {
-        Ok(value) => Some(value),
-        Err(_) => {
-            error!("{field_name} value {value} does not fit into i32");
-            None
-        }
+    if value < i32::MIN as c_long || value > i32::MAX as c_long {
+        error!("{field_name} value {value} does not fit into i32");
+        None
+    } else {
+        Some(value as i32)
     }
 }
 
-pub(crate) unsafe extern "C" fn connection_status_callback(
+pub(crate) unsafe extern "system" fn connection_status_callback(
     connection_event: c_long,
     error_code: c_long,
-    error_message: *mut c_char,
+    error_message: *const c_char,
 ) {
     let error_message = if error_message.is_null() {
         String::from("error_message is null")
     } else {
-        match decode_lpstr(error_message.cast_const()) {
+        match decode_lpstr(error_message) {
             Ok(message) => message,
             Err(err) => {
                 error!("Failed to decode error_message: {err}");
@@ -173,13 +182,13 @@ pub(crate) unsafe extern "C" fn connection_status_callback(
     );
 }
 
-pub(crate) unsafe extern "C" fn transaction_reply_callback(
+pub(crate) unsafe extern "system" fn transaction_reply_callback(
     result_code: c_long,
     error_code: c_long,
     reply_code: c_long,
-    trans_id: c_long,
-    order_num: c_ulonglong,
-    reply_message: *mut c_char,
+    trans_id: u32,
+    order_num: u64,
+    reply_message: *const c_char,
     trans_reply_descriptor: intptr_t,
 ) {
     let Some((api, sender)) = snapshot(|state| (state.api, state.transaction_reply_sender.clone()))
@@ -249,12 +258,12 @@ pub(crate) unsafe extern "C" fn transaction_reply_callback(
     }
 }
 
-pub(crate) unsafe extern "C" fn order_status_callback(
+pub(crate) unsafe extern "system" fn order_status_callback(
     mode: c_long,
-    trans_id: c_long,
-    order_num: c_ulonglong,
-    class_code: *mut c_char,
-    sec_code: *mut c_char,
+    trans_id: u32,
+    order_num: u64,
+    class_code: *const c_char,
+    sec_code: *const c_char,
     price: c_double,
     balance: i64,
     value: c_double,
@@ -360,12 +369,12 @@ pub(crate) unsafe extern "C" fn order_status_callback(
     }
 }
 
-pub(crate) unsafe extern "C" fn trade_status_callback(
+pub(crate) unsafe extern "system" fn trade_status_callback(
     mode: c_long,
-    trade_num: c_ulonglong,
-    order_num: c_ulonglong,
-    class_code: *mut c_char,
-    sec_code: *mut c_char,
+    trade_num: u64,
+    order_num: u64,
+    class_code: *const c_char,
+    sec_code: *const c_char,
     price: c_double,
     quantity: i64,
     is_sell: c_long,

@@ -43,7 +43,7 @@ pub(crate) fn parse_date(date: c_long) -> Result<NaiveDate, DateTimeError> {
         return Err(DateTimeError::InvalidDate);
     }
 
-    let date = i32::try_from(date).map_err(|_| DateTimeError::InvalidDate)?;
+    let date = c_long_to_i32(date).map_err(|_| DateTimeError::InvalidDate)?;
     let date_str = format!("{date:08}");
 
     NaiveDate::parse_from_str(&date_str, "%Y%m%d").map_err(DateTimeError::from)
@@ -55,10 +55,24 @@ pub(crate) fn parse_time(time: c_long) -> Result<NaiveTime, DateTimeError> {
         return Err(DateTimeError::InvalidTime);
     }
 
-    let time = i32::try_from(time).map_err(|_| DateTimeError::InvalidTime)?;
+    let time = c_long_to_i32(time).map_err(|_| DateTimeError::InvalidTime)?;
     let time_str = format!("{time:06}");
 
     NaiveTime::parse_from_str(&time_str, "%H%M%S").map_err(DateTimeError::from)
+}
+
+#[cfg(windows)]
+fn c_long_to_i32(value: c_long) -> Result<i32, ()> {
+    Ok(value)
+}
+
+#[cfg(not(windows))]
+fn c_long_to_i32(value: c_long) -> Result<i32, ()> {
+    if value < i32::MIN as c_long || value > i32::MAX as c_long {
+        Err(())
+    } else {
+        Ok(value as i32)
+    }
 }
 
 fn c_chars_to_bytes(c_chars: &[c_char]) -> &[u8] {

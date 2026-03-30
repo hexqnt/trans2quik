@@ -12,33 +12,33 @@ use std::path::Path;
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::info;
 
-type ConnectFn = unsafe extern "C" fn(*mut c_char, *mut c_long, *mut c_char, c_long) -> c_long;
-type DisconnectFn = unsafe extern "C" fn(*mut c_long, *mut c_char, c_long) -> c_long;
-type IsConnectedFn = unsafe extern "C" fn(*mut c_long, *mut c_char, c_long) -> c_long;
-type SendSyncTransactionFn = unsafe extern "C" fn(
+type ConnectFn = unsafe extern "system" fn(*mut c_char, *mut c_long, *mut c_char, u32) -> c_long;
+type DisconnectFn = unsafe extern "system" fn(*mut c_long, *mut c_char, u32) -> c_long;
+type IsConnectedFn = unsafe extern "system" fn(*mut c_long, *mut c_char, u32) -> c_long;
+type SendSyncTransactionFn = unsafe extern "system" fn(
     trans_str_ptr: *mut c_char,
     reply_code_ptr: *mut c_long,
-    trans_id_ptr: *mut c_long,
-    order_num_ptr: *mut c_double,
+    trans_id_ptr: *mut u32,
+    order_num_ptr: *mut u64,
     result_message_ptr: *mut c_char,
-    result_message_len: c_long,
+    result_message_len: u32,
     error_code_ptr: *mut c_long,
     error_message_ptr: *mut c_char,
-    error_message_len: c_long,
+    error_message_len: u32,
 ) -> c_long;
 type SendAsyncTransactionFn =
-    unsafe extern "C" fn(*mut c_char, *mut c_long, *mut c_char, c_long) -> c_long;
+    unsafe extern "system" fn(*mut c_char, *mut c_long, *mut c_char, u32) -> c_long;
 type SetConnectionStatusCallbackFn =
-    unsafe extern "C" fn(ConnectionStatusCallback, *mut c_long, *mut c_char, c_long) -> c_long;
+    unsafe extern "system" fn(ConnectionStatusCallback, *mut c_long, *mut c_char, u32) -> c_long;
 type SetTransactionsReplyCallbackFn =
-    unsafe extern "C" fn(TransactionReplyCallback, *mut c_long, *mut c_char, c_long) -> c_long;
-type SubscribeFn = unsafe extern "C" fn(*mut c_char, *mut c_char) -> c_long;
-type StartOrdersFn = unsafe extern "C" fn(OrderStatusCallback);
-type StartTradesFn = unsafe extern "C" fn(TradeStatusCallback);
-type UnsubscribeFn = unsafe extern "C" fn() -> c_long;
-type TransactionReplySecCodeFn = unsafe extern "C" fn(intptr_t) -> *mut c_char;
-type TransactionReplyPriceFn = unsafe extern "C" fn(intptr_t) -> c_double;
-type DescriptorDateTimeFn = unsafe extern "C" fn(intptr_t) -> c_long;
+    unsafe extern "system" fn(TransactionReplyCallback, *mut c_long, *mut c_char, u32) -> c_long;
+type SubscribeFn = unsafe extern "system" fn(*mut c_char, *mut c_char) -> c_long;
+type StartOrdersFn = unsafe extern "system" fn(OrderStatusCallback) -> c_long;
+type StartTradesFn = unsafe extern "system" fn(TradeStatusCallback) -> c_long;
+type UnsubscribeFn = unsafe extern "system" fn() -> c_long;
+type TransactionReplySecCodeFn = unsafe extern "system" fn(intptr_t) -> *mut c_char;
+type TransactionReplyPriceFn = unsafe extern "system" fn(intptr_t) -> c_double;
+type DescriptorDateTimeFn = unsafe extern "system" fn(intptr_t) -> c_long;
 
 #[derive(Clone, Copy)]
 struct Trans2QuikApi {
@@ -263,8 +263,8 @@ impl Terminal {
         let trans_str_ptr = trans_str.as_ptr().cast_mut();
 
         let mut reply_code: c_long = 0;
-        let mut trans_id: c_long = 0;
-        let mut order_num: c_double = 0.0;
+        let mut trans_id: u32 = 0;
+        let mut order_num: u64 = 0;
 
         let mut result_message = [0 as c_char; MESSAGE_BUFFER_LEN];
         let mut error_code: c_long = 0;
@@ -278,10 +278,10 @@ impl Terminal {
                 &mut trans_id,
                 &mut order_num,
                 result_message.as_mut_ptr(),
-                result_message.len() as c_long,
+                result_message.len() as u32,
                 &mut error_code,
                 error_message.as_mut_ptr(),
-                error_message.len() as c_long,
+                error_message.len() as u32,
             )
         };
 
@@ -400,17 +400,23 @@ impl Terminal {
     /// Starts order callback stream delivery.
     ///
     /// Call [`Self::set_order_status_sender`] before starting the stream.
-    pub fn start_orders(&self) {
+    pub fn start_orders(&self) -> Result<Trans2QuikResult, Trans2QuikError> {
         // SAFETY: callback имеет корректную ABI и lifetime `'static`.
-        unsafe { (self.api.start_orders)(callbacks::order_status_callback) }
+        let function_result = unsafe { (self.api.start_orders)(callbacks::order_status_callback) };
+        let trans2quik_result = Trans2QuikResult::from(function_result);
+        info!("TRANS2QUIK_START_ORDERS -> {:?}", trans2quik_result);
+        Ok(trans2quik_result)
     }
 
     /// Starts trade callback stream delivery.
     ///
     /// Call [`Self::set_trade_status_sender`] before starting the stream.
-    pub fn start_trades(&self) {
+    pub fn start_trades(&self) -> Result<Trans2QuikResult, Trans2QuikError> {
         // SAFETY: callback имеет корректную ABI и lifetime `'static`.
-        unsafe { (self.api.start_trades)(callbacks::trade_status_callback) }
+        let function_result = unsafe { (self.api.start_trades)(callbacks::trade_status_callback) };
+        let trans2quik_result = Trans2QuikResult::from(function_result);
+        info!("TRANS2QUIK_START_TRADES -> {:?}", trans2quik_result);
+        Ok(trans2quik_result)
     }
 
     /// Stops order callback stream and clears server-side subscription list.
@@ -431,7 +437,7 @@ impl Terminal {
 
     fn call_with_error_buffer<F>(function_name: &str, func: F) -> Trans2QuikResult
     where
-        F: FnOnce(*mut c_long, *mut c_char, c_long) -> c_long,
+        F: FnOnce(*mut c_long, *mut c_char, u32) -> c_long,
     {
         let mut error_code: c_long = 0;
         let mut error_message = [0 as c_char; MESSAGE_BUFFER_LEN];
@@ -439,7 +445,7 @@ impl Terminal {
         let function_result = func(
             &mut error_code,
             error_message.as_mut_ptr(),
-            error_message.len() as c_long,
+            error_message.len() as u32,
         );
 
         let error_message = decode_c_buffer(&error_message);

@@ -22,5 +22,5 @@ tokio = { version = "1.50.0", features = ["sync"] }
 chrono = { version = "0.4.44", features = ["serde"] }
 
 [package.metadata.docs.rs]
-default-target = "x86_64-pc-windows-msvc"
-targets = ["x86_64-pc-windows-msvc"]
+default-target = "x86_64-pc-windows-gnu"
+targets = ["x86_64-pc-windows-msvc", "x86_64-pc-windows-gnu"]

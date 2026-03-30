@@ -32,8 +32,8 @@ fn setup_terminal() -> Result<Terminal, Box<dyn std::error::Error>> {
     terminal.set_transactions_reply_callback()?;
     terminal.subscribe_orders(class_code, sec_code)?;
     terminal.subscribe_trades(class_code, sec_code)?;
-    terminal.start_orders();
-    terminal.start_trades();
+    terminal.start_orders()?;
+    terminal.start_trades()?;
 
     Ok(terminal)
 }

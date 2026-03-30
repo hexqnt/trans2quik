@@ -29,17 +29,23 @@ impl From<c_long> for Mode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TransId {
     /// Known non-zero transaction id.
-    Id(c_long),
+    Id(u32),
     /// Missing/unknown transaction id reported by Trans2QUIK.
-    Unknown(c_long),
+    Unknown(u32),
 }
 
-impl From<c_long> for TransId {
-    fn from(id: c_long) -> Self {
+impl From<u32> for TransId {
+    fn from(id: u32) -> Self {
         match id {
             0 => Self::Unknown(id),
             _ => Self::Id(id),
         }
+    }
+}
+
+impl From<c_long> for TransId {
+    fn from(id: c_long) -> Self {
+        Self::from(id as u32)
     }
 }
 
