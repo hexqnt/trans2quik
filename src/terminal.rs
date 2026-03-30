@@ -8,6 +8,7 @@ use crate::types::{OrderEvent, TradeEvent, Trans2QuikResult, TransactionInfo};
 use libc::{c_char, c_double, c_long, intptr_t};
 use libloading::{Library, Symbol};
 use std::ffi::CString;
+use std::path::Path;
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::info;
 
@@ -132,11 +133,14 @@ pub struct Terminal {
 
 impl Terminal {
     /// Loads the DLL and resolves all required FFI symbols.
-    pub fn new(path_to_lib: &str, path_to_quik: &str) -> Result<Self, Trans2QuikError> {
-        let path_to_quik = CString::new(path_to_quik)?;
+    pub fn new(
+        path_to_lib: impl AsRef<Path>,
+        path_to_quik: impl AsRef<Path>,
+    ) -> Result<Self, Trans2QuikError> {
+        let path_to_quik = CString::new(path_to_quik.as_ref().to_string_lossy().into_owned())?;
 
         // SAFETY: путь передан пользователем и используется только для загрузки DLL.
-        let library = unsafe { Library::new(path_to_lib)? };
+        let library = unsafe { Library::new(path_to_lib.as_ref())? };
         let api = Trans2QuikApi::load(&library)?;
         callbacks::install_api(api.callback_api())?;
 
